@@ -209,6 +209,128 @@ In Jira Cloud, create a webhook with:
 The handler rejects anything that isn't a Bug create event, and re-validates
 the project key before triggering OpenClaw.
 
+## Use Case 2: Infrastructure RCA
+
+In addition to bug resolution, this MCP server exposes a second toolset for
+**root-cause analysis of infrastructure incidents** — failed Jenkins builds
+or alerts that a service is down. The infra agent is **strictly read-only**:
+it investigates Jenkins, hits health endpoints, probes service ports, and
+queries a log API, then posts a structured RCA card to Google Chat. It
+**never** SSHes, runs shell commands, or mutates any system.
+
+### Architecture
+
+```
+Jenkins build fails ─► mcp-server (/webhook/jenkins) ─► OpenClaw ─► mcp-server (stdio MCP)
+                                                                          │
+                                              Jenkins API • health URLs • metrics URLs • logs API • Google Chat
+```
+
+The Jenkins webhook runs on `mcp_server.webhook_jenkins:app` (port `8001`
+by default) — separate from the Jira webhook so the two use cases can be
+deployed independently. Both apps share the same MCP server process.
+
+### Infra tools at a glance
+
+| Tool                      | What it does                                                    |
+| ------------------------- | --------------------------------------------------------------- |
+| `jenkins_get_build_info`  | Build result, duration, timestamp, parameters                   |
+| `jenkins_get_build_log`   | Console log — auto-truncated to the **last 500 lines**          |
+| `server_check_status`     | HTTP GET on an allowlisted URL → status code + response time    |
+| `server_check_resources`  | HTTP GET on a monitoring URL (e.g. `/metrics`)                  |
+| `server_check_services`   | TCP socket connect (5s timeout) to allowlisted ports            |
+| `server_read_logs`        | HTTP GET on a logs API with sanitized query string              |
+| `gchat_send_report`       | Structured RCA card (Google Chat Card v2)                       |
+
+### Monitoring endpoints you need
+
+The agent only investigates — it doesn't install anything. You provide:
+
+- A **health endpoint** per service (any URL that returns 2xx when healthy,
+  e.g. `/healthz`).
+- A **metrics endpoint** per host — node_exporter on `:9100/metrics`, a
+  custom JSON endpoint, or anything an HTTP GET can read.
+- A **log aggregation API** (Loki, Elasticsearch, or any HTTP API that
+  accepts a `query` + `limit` parameter and returns JSON or text).
+
+Then list every hostname the agent may probe in `ALLOWED_MONITORING_DOMAINS`
+(comma-separated). Anything not in the list is rejected by the guardrail
+**before** any HTTP call is made.
+
+### Configuring the Jenkins webhook
+
+Install the Jenkins **Notification plugin** (or **Generic Webhook Trigger**)
+and configure your pipeline:
+
+- **URL** — `https://<your-public-tunnel>/webhook/jenkins?secret=<JENKINS_WEBHOOK_SECRET>`
+- **Event** — Job Completed (the handler will skip anything where
+  `result == "SUCCESS"`)
+- **Content** — JSON; the handler accepts both the Notification plugin's
+  `{"name": "...", "build": {"number": N, "result": "..."}}` shape and the
+  Generic Webhook Trigger's flat `{"job_name": "...", "build_number": N, "result": "..."}`.
+
+The handler validates the `?secret=` query parameter with `hmac.compare_digest`
+and only dispatches **failed** builds to OpenClaw.
+
+### Read-only by design
+
+This is worth repeating because it shapes every architectural choice:
+
+- **No SSH.** All server inspection is HTTP or TCP-connect — there is no
+  channel for executing arbitrary commands on a host.
+- **No shell.** OpenClaw runs with `shell.enabled = false` in
+  `tool-policy-infra.json`.
+- **No mutation.** The agent's `proposed_fix` is text in an RCA card. A
+  human reads it and decides whether to act.
+- **Allowlists everywhere.** Ports are restricted to a fixed set of common
+  service ports (80, 443, 8080, 8443, 3000, 5000, 5432, 3306, 6379, 27017,
+  9090, 9100). Hosts are restricted to `ALLOWED_MONITORING_DOMAINS`. Log
+  queries are rejected if they contain shell metacharacters.
+- **Jenkins job-name validation.** The job-name is checked against a strict
+  regex (no `..`, no spaces, no shell metacharacters) to prevent path
+  traversal in the Jenkins API URL.
+
+If we ever need SSH-based checks, they go behind a separate, strict command
+allowlist (no shell, no pipes, no arguments outside an enum) — they will
+**not** be added to the existing tools.
+
+### Example Google Chat RCA card
+
+`gchat_send_report` sends a Google Chat Card v2 with five sections:
+
+```json
+{
+  "cardsV2": [{
+    "card": {
+      "header": {
+        "title": "RCA: deploy-api build #42 failed",
+        "subtitle": "Confidence: MEDIUM"
+      },
+      "sections": [
+        {"header": "What failed",        "widgets": [{"textParagraph": {"text": "Build #42 of deploy-api failed at the migrate step."}}]},
+        {"header": "Root cause",         "widgets": [{"textParagraph": {"text": "Postgres on db.example.com:5432 was unreachable."}}]},
+        {"header": "Affected services",  "widgets": [{"textParagraph": {"text": "deploy-api, postgres"}}]},
+        {"header": "Proposed fix",       "widgets": [{"textParagraph": {"text": "Verify postgres connectivity; check security group; consider rollback."}}]},
+        {"header": "Status",             "widgets": [{"decoratedText": {"topLabel": "Confidence", "text": "<font color=\"#F9AB00\"><b>MEDIUM</b></font>"}}]}
+      ]
+    }
+  }]
+}
+```
+
+The confidence color is green (`#1E8E3E`) for high, amber (`#F9AB00`) for
+medium, red (`#D93025`) for low.
+
+### Running just the Jenkins webhook locally
+
+```bash
+cd mcp-server
+uv run uvicorn mcp_server.webhook_jenkins:app --host 127.0.0.1 --port 8001
+```
+
+POST to `http://127.0.0.1:8001/webhook/jenkins?secret=<JENKINS_WEBHOOK_SECRET>`
+with a Jenkins-shaped payload to exercise it.
+
 ## Testing tools individually
 
 Each tool is an async function returning a structured dict — easy to drive

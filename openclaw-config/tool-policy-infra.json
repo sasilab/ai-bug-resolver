@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "default": "deny",
+  "shell": {
+    "enabled": false
+  },
+  "browser": {
+    "enabled": false
+  },
+  "filesystem": {
+    "enabled": false,
+    "workspace_only": true,
+    "allowed_paths": []
+  },
+  "network": {
+    "default": "deny",
+    "allow": [
+      "mcp-server:8000"
+    ]
+  },
+  "skills": {
+    "third_party": false,
+    "allowed": []
+  },
+  "mcp": {
+    "allow": [
+      "ai-bug-resolver-mcp.jenkins_get_build_info",
+      "ai-bug-resolver-mcp.jenkins_get_build_log",
+      "ai-bug-resolver-mcp.server_check_status",
+      "ai-bug-resolver-mcp.server_check_resources",
+      "ai-bug-resolver-mcp.server_check_services",
+      "ai-bug-resolver-mcp.server_read_logs",
+      "ai-bug-resolver-mcp.gchat_send_report"
+    ],
+    "deny": ["*"]
+  }
+}
