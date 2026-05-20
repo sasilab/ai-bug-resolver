@@ -15,6 +15,14 @@ Jira webhook ─► mcp-server (FastAPI) ─► OpenClaw ─► mcp-server (stdi
 Everything routes through the MCP server. OpenClaw never calls external APIs
 directly, and the MCP server enforces every security guardrail on the way out.
 
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md) — full project context for AI coding agents (and humans). Start here if you want to extend the project.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system architecture, component responsibilities, and per-use-case flow diagrams.
+- [docs/ADDING-TOOLS.md](docs/ADDING-TOOLS.md) — step-by-step recipe for adding a new MCP tool (with a worked example).
+- [docs/SECURITY.md](docs/SECURITY.md) — consolidated security model, hardening checklist, and OpenClaw upgrade policy.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — fork → setup → test → PR workflow.
+
 ## Prerequisites
 
 You'll need four command-line tools installed before you can run anything in
