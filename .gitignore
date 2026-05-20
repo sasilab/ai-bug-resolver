@@ -1,0 +1,36 @@
+# --- Secrets / environment ---
+.env
+.env.local
+.env.production
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# --- Node ---
+node_modules/
+
+# --- Logs ---
+*.log
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- OpenClaw ---
+# Real config (commit only the .example variant). Workspace contains runtime data.
+openclaw-config/openclaw.json
+workspace/

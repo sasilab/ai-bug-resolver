@@ -1,0 +1,65 @@
+services:
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-bug-resolver/mcp-server:0.1.0
+    container_name: ai-bug-resolver-mcp
+    env_file:
+      - .env
+    # Localhost-only port — never expose to the public internet directly.
+    # Put it behind a reverse proxy (ngrok / Cloudflare Tunnel / nginx) for
+    # the Jira webhook.
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - bug-resolver
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  openclaw:
+    image: openclaw/desktop:2026.4.22
+    container_name: ai-bug-resolver-openclaw
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENCLAW_API_KEY: ${OPENCLAW_API_KEY:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      OPENCLAW_CONFIG: /config/openclaw.json
+    # Gateway API used by the webhook handler; localhost-only.
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - bug-resolver
+    volumes:
+      # Config is mounted read-only. No other host paths are exposed.
+      - ./openclaw-config:/config:ro
+      # Ephemeral writable workspace for the agent (tmpfs — wiped on restart).
+      - openclaw-workspace:/workspace
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+networks:
+  bug-resolver:
+    driver: bridge
+    internal: false  # mcp-server needs to reach Jira/Bitbucket/Slack
+
+volumes:
+  openclaw-workspace:
