@@ -17,25 +17,138 @@ directly, and the MCP server enforces every security guardrail on the way out.
 
 ## Prerequisites
 
-- Python **3.12+**
-- [`uv`](https://docs.astral.sh/uv/) (single binary; see install command below)
-- Docker + Docker Compose
-- Accounts and credentials for:
-  - Jira Cloud (email + API token, one read-only project)
-  - Bitbucket Cloud (bot account with App Password, scoped to one test repo)
-  - Slack incoming webhook (or Google Chat webhook)
-  - OpenClaw v2026.4.22+
-  - An LLM provider key (Anthropic or OpenAI) for the agent
+You'll need four command-line tools installed before you can run anything in
+this repo. Follow the instructions for your operating system — each tool
+takes only a minute or two.
 
-Install `uv`:
+### 1. Python 3.12+
 
-```powershell
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+The MCP server is written in Python. We need version **3.12 or newer**.
 
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
+- **Windows** — Download the installer from
+  <https://www.python.org/downloads/> and run it. **Important:** tick the
+  **"Add python.exe to PATH"** checkbox on the first screen of the
+  installer — without it, the `python` command won't work in your terminal.
+- **macOS** — Install with Homebrew:
+
+  ```bash
+  brew install python@3.12
+  ```
+
+- **Linux (Debian/Ubuntu)** —
+
+  ```bash
+  sudo apt update && sudo apt install python3.12
+  ```
+
+### 2. uv (Python package manager)
+
+`uv` is a fast, modern replacement for `pip` and `venv`. It manages the
+project's virtual environment and dependencies in one tool.
+
+- **Windows (PowerShell)** —
+
+  ```powershell
+  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
+
+- **macOS / Linux** —
+
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+
+After installation you may need to open a fresh terminal so `uv` is on your
+PATH.
+
+### 3. Docker Desktop
+
+Docker Desktop runs the full stack (MCP server + OpenClaw) in containers.
+**You only need Docker if you want to run the full stack** — you can still
+run tests and the standalone MCP server without it (see
+["Running Without Docker"](#running-without-docker) below).
+
+- **Windows** — Install from
+  <https://docs.docker.com/desktop/setup/install/windows-install/>.
+  Docker Desktop on Windows requires **WSL2** — the installer will prompt
+  you to enable it if it isn't already.
+- **macOS** — Install from
+  <https://docs.docker.com/desktop/setup/install/mac-install/>.
+- **Linux** — Install from
+  <https://docs.docker.com/desktop/setup/install/linux/>.
+
+After install, **open Docker Desktop and wait for it to finish starting**
+(the whale icon in your menu/tray turns from animated to steady) before
+running any `docker` commands. Then verify:
+
+```bash
+docker --version
+docker compose version
 ```
+
+### 4. Git
+
+Used to clone this repository and to push changes back to your fork.
+
+- **Windows** — Download from <https://git-scm.com/downloads/win>.
+- **macOS** — Run the Xcode command-line tools installer:
+
+  ```bash
+  xcode-select --install
+  ```
+
+- **Linux (Debian/Ubuntu)** —
+
+  ```bash
+  sudo apt install git
+  ```
+
+### Quick Verify
+
+Open a new terminal and run all five commands:
+
+```bash
+python --version
+uv --version
+docker --version
+docker compose version
+git --version
+```
+
+If all five commands return version numbers, you're ready to proceed.
+
+> On some systems Python is installed as `python3` instead of `python` —
+> if `python --version` errors but `python3 --version` works, just use
+> `python3` everywhere below.
+
+### Accounts and credentials
+
+You also need accounts (or read-only test credentials) for:
+
+- **Jira Cloud** — email + API token, one read-only project
+- **Bitbucket Cloud** — bot account with App Password, scoped to one test repo
+- **Slack incoming webhook** (or Google Chat webhook)
+- **OpenClaw v2026.4.22+**
+- **An LLM provider key** (Anthropic or OpenAI) for the agent
+
+These all go in your local `.env` file (see [Setup](#setup) below).
+
+## Running Without Docker
+
+Docker is only required for the full **OpenClaw + MCP server** stack. If you
+just want to develop, run the test suite, or hit the MCP server's HTTP
+endpoints manually, you can skip Docker entirely:
+
+```bash
+cd mcp-server
+uv sync
+uv run pytest -q
+uv run uvicorn mcp_server.webhook:app --host 127.0.0.1 --port 8000
+```
+
+That gives you the webhook handler on `http://127.0.0.1:8000` and a passing
+test suite — no containers needed. Install Docker later when you're ready to
+bring up OpenClaw alongside the MCP server.
 
 ## Setup
 
