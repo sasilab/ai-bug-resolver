@@ -3,6 +3,11 @@
 .env.local
 .env.production
 
+# --- Claude Code (per-project state) ---
+.claude/
+CLAUDE.md
+SESSION_LOG.md
+
 # --- Python ---
 __pycache__/
 *.pyc
